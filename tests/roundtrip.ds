@@ -1,0 +1,183 @@
+import { echo } from "io"
+
+import { header, value, parse, all, has, get, build_set_cookie, clear_cookie } from "../index.ds"
+
+fn fail(msg: string) {
+  echo(msg)
+}
+
+fn req(cookie: string) {
+  return { headers: { cookie: cookie } }
+}
+
+fn contains(hay: string, needle: string): boolean {
+  return hay.includes(needle)
+}
+
+fn field_of(header: string, key: string): string {
+  const bag = parse(header)
+  let r = unsafe { Object.prototype.hasOwnProperty.call(bag, key) ? String(bag[key]) : "" };
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => ""
+  };
+}
+
+fn unwrap_set(r: Result<string, string>): string {
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => e,
+    _ => ""
+  }
+}
+
+fn go() {
+  const jar = "_ga=1; deka_sid=alice; theme=dark";
+  const request = req(jar);
+
+  if (header(request) != jar) {
+    fail("fail-header");
+    return;
+  }
+
+  if (get(request, "deka_sid") != "alice") {
+    fail("fail-get");
+    return;
+  }
+  if (get(req("_ga=1; theme=dark"), "deka_sid", "missing") != "missing") {
+    fail("fail-fallback");
+    return;
+  }
+  if (value(jar, "theme") != "dark") {
+    fail("fail-value");
+    return;
+  }
+  if (get(request, "deka") != "") {
+    fail("fail-prefix");
+    return;
+  }
+
+  const has_sid: boolean = has(request, "deka_sid");
+  const has_missing: boolean = has(request, "nope");
+  if (!has_sid || has_missing) {
+    fail("fail-has");
+    return;
+  }
+
+  if (field_of(jar, "deka_sid") != "alice" || field_of(jar, "_ga") != "1") {
+    fail("fail-parse");
+    return;
+  }
+
+  if (field_of(jar, "theme") != "dark") {
+    fail("fail-all");
+    return;
+  }
+
+  const ctor_jar = "constructor=evil; toString=x; deka_sid=alice";
+  if (field_of(ctor_jar, "constructor") != "evil" || field_of(ctor_jar, "deka_sid") != "alice") {
+    fail("fail-constructor");
+    echo(field_of(ctor_jar, "constructor"));
+    return;
+  }
+
+  const encoded_val = match (unsafe { encodeURIComponent("a b") }) {
+    Ok(v) => v,
+    Err(e) => ""
+  };
+  if (get(req("sid=" + encoded_val), "sid") != "a b") {
+    fail("fail-decode");
+    return;
+  }
+
+  const cap = match (unsafe { ({ headers: { Cookie: "sid=bob" } }) }) {
+    Ok(v) => v,
+    Err(e) => req("")
+  };
+  if (get(cap, "sid") != "bob") {
+    fail("fail-cookie-header");
+    return;
+  }
+
+  const built = unwrap_set(build_set_cookie("sid", "abc", {}));
+  if (!contains(built, "sid=abc")) {
+    fail("fail-set-name");
+    echo(built);
+    return;
+  }
+  if (!contains(built, "Path=/") || !contains(built, "Secure") || !contains(built, "HttpOnly") || !contains(built, "SameSite=Lax")) {
+    fail("fail-set-defaults");
+    echo(built);
+    return;
+  }
+  if (contains(built, "Max-Age=") || contains(built, "Domain=")) {
+    fail("fail-set-optional");
+    echo(built);
+    return;
+  }
+
+  const custom_opts = { path: "/app", domain: "example.com", max_age: 60, secure: false, http_only: false, same_site: "strict" };
+  const custom = unwrap_set(build_set_cookie("sid", "x", custom_opts));
+  if (!contains(custom, "Path=/app") || !contains(custom, "Domain=example.com") || !contains(custom, "Max-Age=60")) {
+    fail("fail-set-custom");
+    echo(custom);
+    return;
+  }
+  if (contains(custom, "Secure") || contains(custom, "HttpOnly")) {
+    fail("fail-set-flags");
+    echo(custom);
+    return;
+  }
+  if (!contains(custom, "SameSite=Strict")) {
+    fail("fail-samesite-strict");
+    echo(custom);
+    return;
+  }
+
+  const none_opts = { same_site: "none", secure: true };
+  const none = unwrap_set(build_set_cookie("sid", "x", none_opts));
+  if (!contains(none, "SameSite=None") || !contains(none, "Secure")) {
+    fail("fail-samesite-none");
+    echo(none);
+    return;
+  }
+
+  const none_insecure = { same_site: "none", secure: false };
+  if (unwrap_set(build_set_cookie("sid", "x", none_insecure)) != "SameSite=None requires Secure") {
+    fail("fail-samesite-none-secure");
+    echo(unwrap_set(build_set_cookie("sid", "x", none_insecure)));
+    return;
+  }
+
+  const bad_path = { path: "/; Domain=evil.com" };
+  if (unwrap_set(build_set_cookie("sid", "v", bad_path)) != "invalid cookie path") {
+    fail("fail-inject-path");
+    echo(unwrap_set(build_set_cookie("sid", "v", bad_path)));
+    return;
+  }
+
+  const bad_domain = { domain: "evil.com,x" };
+  if (unwrap_set(build_set_cookie("sid", "v", bad_domain)) != "invalid cookie domain") {
+    fail("fail-inject-domain");
+    echo(unwrap_set(build_set_cookie("sid", "v", bad_domain)));
+    return;
+  }
+
+  if (unwrap_set(build_set_cookie("sid\r\nX", "v", {})) != "invalid cookie name") {
+    fail("fail-inject-name");
+    echo(unwrap_set(build_set_cookie("sid\r\nX", "v", {})));
+    return;
+  }
+
+  const clear_opts = { path: "/", secure: false };
+  const cleared = unwrap_set(clear_cookie("sid", clear_opts));
+  if (!contains(cleared, "sid=") || !contains(cleared, "Max-Age=0") || !contains(cleared, "Expires=")) {
+    fail("fail-clear");
+    echo(cleared);
+    return;
+  }
+
+  echo("ok");
+}
+
+go()
