@@ -1,11 +1,5 @@
+import { echo } from "io"
 import { header, value, parse, all, has, get, build_set_cookie, clear_cookie } from "../index.ds"
-
-fn echo(message: string) {
-  match (unsafe { console.log(message) }) {
-    Ok(v) => v,
-    Err(e) => e
-  }
-}
 
 fn fail(msg: string) {
   echo(msg)
