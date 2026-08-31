@@ -1,0 +1,178 @@
+// Cookie header parse/build. No ambient $_COOKIE — pass the request (or the
+// Cookie header string). Set-Cookie defaults match the PHPX module: Path=/,
+// Secure, HttpOnly, SameSite=Lax.
+
+interface CookieHeaders {
+  cookie: string?
+}
+
+interface CookieRequest {
+  headers: CookieHeaders?
+}
+
+interface CookieOptions {
+  path: string?
+  domain: string?
+  max_age: number?
+  expires: number?
+  secure: boolean?
+  http_only: boolean?
+  same_site: string?
+}
+
+fn header_from(request: CookieRequest): string {
+  let r = unsafe {
+    var headers = request && request.headers;
+    if (!headers) return "";
+    return String(headers.cookie || headers.Cookie || "");
+  };
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => ""
+  };
+}
+
+fn find_cookie(header: string, name: string) {
+  return unsafe {
+    var want = String(name || "");
+    if (!want) return { found: false, value: "" };
+    var parts = String(header || "").split(";");
+    var i = 0;
+    for (i = 0; i < parts.length; i++) {
+      var part = parts[i].trim();
+      var eq = part.indexOf("=");
+      if (eq <= 0) continue;
+      if (part.slice(0, eq) !== want) continue;
+      var raw = part.slice(eq + 1).trim();
+      try {
+        return { found: true, value: decodeURIComponent(raw) };
+      } catch (err) {
+        return { found: true, value: raw };
+      }
+    }
+    return { found: false, value: "" };
+  };
+}
+
+export fn header(request: CookieRequest): string {
+  return header_from(request)
+}
+
+export fn value(header: string, name: string): string {
+  return match (find_cookie(header, name)) {
+    Err(e) => "",
+    Ok(hit) => match (unsafe { hit.found ? String(hit.value) : "" }) {
+      Ok(v) => v,
+      Err(e) => ""
+    }
+  }
+}
+
+export fn parse(header: string) {
+  return unsafe {
+    var out = {};
+    var parts = String(header || "").split(";");
+    var i = 0;
+    for (i = 0; i < parts.length; i++) {
+      var part = parts[i].trim();
+      var eq = part.indexOf("=");
+      if (eq <= 0) continue;
+      var key = part.slice(0, eq);
+      if (out[key] != null) continue;
+      var raw = part.slice(eq + 1).trim();
+      try {
+        out[key] = decodeURIComponent(raw);
+      } catch (err) {
+        out[key] = raw;
+      }
+    }
+    return out;
+  };
+}
+
+export fn all(request: CookieRequest) {
+  return parse(header_from(request))
+}
+
+export fn has(request: CookieRequest, name: string): boolean {
+  let r = find_cookie(header_from(request), name);
+  return match (r) {
+    Err(e) => false,
+    Ok(hit) => match (unsafe { Boolean(hit.found) }) {
+      Ok(v) => v,
+      Err(e) => false
+    }
+  }
+}
+
+export fn get(request: CookieRequest, name: string, fallback: string = ""): string {
+  let r = find_cookie(header_from(request), name);
+  return match (r) {
+    Err(e) => fallback,
+    Ok(hit) => match (unsafe { hit.found ? String(hit.value) : fallback }) {
+      Ok(v) => v,
+      Err(e) => fallback
+    }
+  }
+}
+
+export fn build_set_cookie(name: string, value: string, options: CookieOptions = {}): string {
+  let r = unsafe {
+    var opts = options || {};
+    var key = String(name);
+    var cookie = key + "=" + encodeURIComponent(String(value));
+
+    var path = opts.path == null ? "/" : opts.path;
+    if (path !== null && path !== "") cookie += "; Path=" + path;
+
+    var domain = opts.domain == null ? null : opts.domain;
+    if (domain !== null && domain !== "") cookie += "; Domain=" + domain;
+
+    var maxAge = opts.max_age;
+    if (maxAge !== null && maxAge !== "" && maxAge !== undefined) {
+      cookie += "; Max-Age=" + String(Number(maxAge));
+    }
+
+    var expires = opts.expires;
+    if (expires !== null && expires !== "" && expires !== undefined) {
+      var exp = expires;
+      if (typeof exp === "number" || /^-?\d+(\.\d+)?$/.test(String(exp))) {
+        exp = new Date(Number(exp) * 1000).toUTCString();
+      }
+      cookie += "; Expires=" + String(exp);
+    }
+
+    var secure = opts.secure == null ? true : Boolean(opts.secure);
+    if (secure) cookie += "; Secure";
+
+    var httpOnly = opts.http_only == null ? true : Boolean(opts.http_only);
+    if (httpOnly) cookie += "; HttpOnly";
+
+    var sameSite = opts.same_site;
+    if (sameSite == null) sameSite = "Lax";
+    if (sameSite !== "") {
+      var v = String(sameSite).trim().toLowerCase();
+      var norm = v === "strict" ? "Strict" : v === "none" ? "None" : "Lax";
+      cookie += "; SameSite=" + norm;
+    }
+
+    return cookie;
+  };
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => name + "="
+  };
+}
+
+export fn clear_cookie(name: string, options: CookieOptions = {}): string {
+  let r = unsafe {
+    var opts = Object.assign({}, options || {});
+    opts.max_age = 0;
+    opts.expires = 0;
+    return opts;
+  };
+  return match (r) {
+    Err(e) => build_set_cookie(name, "", options),
+    Ok(opts) => build_set_cookie(name, "", opts)
+  }
+}

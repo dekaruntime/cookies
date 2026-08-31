@@ -1,0 +1,163 @@
+import { header, value, parse, all, has, get, build_set_cookie, clear_cookie } from "../index.ds"
+
+fn echo(message: string) {
+  match (unsafe { console.log(message) }) {
+    Ok(v) => v,
+    Err(e) => e
+  }
+}
+
+fn fail(msg: string) {
+  echo(msg)
+}
+
+fn req(cookie: string) {
+  return { headers: { cookie: cookie } }
+}
+
+fn contains(hay: string, needle: string): boolean {
+  let r = unsafe { hay.indexOf(needle) >= 0 };
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => false
+  };
+}
+
+interface Bag {
+  deka_sid: string?
+  _ga: string?
+  theme: string?
+}
+
+fn field(obj: Bag, key: string): string {
+  let r = unsafe { String(obj[key] || "") };
+  return match (r) {
+    Ok(v) => v,
+    Err(e) => ""
+  };
+}
+
+fn go() {
+  const jar = "_ga=1; deka_sid=alice; theme=dark";
+  const request = req(jar);
+
+  if (header(request) != jar) {
+    fail("fail-header");
+    return;
+  }
+
+  if (get(request, "deka_sid") != "alice") {
+    fail("fail-get");
+    return;
+  }
+  if (get(req("_ga=1; theme=dark"), "deka_sid", "missing") != "missing") {
+    fail("fail-fallback");
+    return;
+  }
+  if (value(jar, "theme") != "dark") {
+    fail("fail-value");
+    return;
+  }
+  if (get(request, "deka") != "") {
+    fail("fail-prefix");
+    return;
+  }
+
+  const has_sid: boolean = has(request, "deka_sid");
+  const has_missing: boolean = has(request, "nope");
+  if (!has_sid || has_missing) {
+    fail("fail-has");
+    return;
+  }
+
+  const parsed = match (parse(jar)) {
+    Ok(v) => v,
+    Err(e) => { deka_sid: "" }
+  };
+  if (field(parsed, "deka_sid") != "alice" || field(parsed, "_ga") != "1") {
+    fail("fail-parse");
+    return;
+  }
+
+  const listed = match (all(request)) {
+    Ok(v) => v,
+    Err(e) => { theme: "" }
+  };
+  if (field(listed, "theme") != "dark") {
+    fail("fail-all");
+    return;
+  }
+
+  const encoded_val = match (unsafe { encodeURIComponent("a b") }) {
+    Ok(v) => v,
+    Err(e) => ""
+  };
+  if (get(req("sid=" + encoded_val), "sid") != "a b") {
+    fail("fail-decode");
+    return;
+  }
+
+  const cap = match (unsafe { ({ headers: { Cookie: "sid=bob" } }) }) {
+    Ok(v) => v,
+    Err(e) => req("")
+  };
+  if (get(cap, "sid") != "bob") {
+    fail("fail-cookie-header");
+    return;
+  }
+
+  const built = build_set_cookie("sid", "abc", {});
+  if (!contains(built, "sid=abc")) {
+    fail("fail-set-name");
+    echo(built);
+    return;
+  }
+  if (!contains(built, "Path=/") || !contains(built, "Secure") || !contains(built, "HttpOnly") || !contains(built, "SameSite=Lax")) {
+    fail("fail-set-defaults");
+    echo(built);
+    return;
+  }
+  if (contains(built, "Max-Age=") || contains(built, "Domain=")) {
+    fail("fail-set-optional");
+    echo(built);
+    return;
+  }
+
+  const custom_opts = { path: "/app", domain: "example.com", max_age: 60, secure: false, http_only: false, same_site: "strict" };
+  const custom = build_set_cookie("sid", "x", custom_opts);
+  if (!contains(custom, "Path=/app") || !contains(custom, "Domain=example.com") || !contains(custom, "Max-Age=60")) {
+    fail("fail-set-custom");
+    echo(custom);
+    return;
+  }
+  if (contains(custom, "Secure") || contains(custom, "HttpOnly")) {
+    fail("fail-set-flags");
+    echo(custom);
+    return;
+  }
+  if (!contains(custom, "SameSite=Strict")) {
+    fail("fail-samesite-strict");
+    echo(custom);
+    return;
+  }
+
+  const none_opts = { same_site: "none", secure: true };
+  const none = build_set_cookie("sid", "x", none_opts);
+  if (!contains(none, "SameSite=None") || !contains(none, "Secure")) {
+    fail("fail-samesite-none");
+    echo(none);
+    return;
+  }
+
+  const clear_opts = { path: "/", secure: false };
+  const cleared = clear_cookie("sid", clear_opts);
+  if (!contains(cleared, "sid=") || !contains(cleared, "Max-Age=0") || !contains(cleared, "Expires=")) {
+    fail("fail-clear");
+    echo(cleared);
+    return;
+  }
+
+  echo("ok");
+}
+
+go()
