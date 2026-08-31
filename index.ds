@@ -341,7 +341,11 @@ export fn build_set_cookie(name: string, value: string, options: CookieOptions =
 
 fn cleared_options(options: CookieOptions): CookieOptions {
   const raw = raw_options(options)
-  return { path: raw.path, domain: raw.domain, max_age: 0, expires: 0, secure: raw.secure, http_only: raw.http_only, same_site: raw.same_site }
+  // CookieOptions fields are declared `T?`, so each is an Option and must be
+  // written Some(x). A raw value was accepted as sugar for Some(x) until
+  // dekaruntime/deka#412 removed it — the emitter never implemented the sugar,
+  // so the value was left unwrapped and threw on the first match.
+  return { path: Some(raw.path), domain: Some(raw.domain), max_age: Some(0), expires: Some(0), secure: Some(raw.secure), http_only: Some(raw.http_only), same_site: Some(raw.same_site) }
 }
 
 export fn clear_cookie(name: string, options: CookieOptions = {}) {
