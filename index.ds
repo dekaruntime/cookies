@@ -55,7 +55,7 @@ fn header_from(request: CookieRequest): string {
 }
 
 fn encode_value(value: string): string {
-  let r = unsafe { encodeURIComponent(value) };
+  let r = unsafe<string> { encodeURIComponent(value) };
   return match (r) {
     Ok(v) => v,
     Err(e) => value
@@ -85,7 +85,7 @@ fn empty_bag(): CookieBag {
 }
 
 fn bag_has(bag: CookieBag, key: string): boolean {
-  let r = unsafe { Object.prototype.hasOwnProperty.call(bag, key) };
+  let r = unsafe<boolean> { Object.prototype.hasOwnProperty.call(bag, key) };
   return match (r) {
     Ok(v) => v,
     Err(e) => false
@@ -126,7 +126,7 @@ fn cookie_attr_ok(value: string, which: string) {
 }
 
 fn gmt_expires(unix: number): string {
-  let r = unsafe { return new Date(Number(unix) * 1000).toUTCString(); };
+  let r = unsafe<string> { return new Date(Number(unix) * 1000).toUTCString(); };
   return match (r) {
     Ok(v) => v,
     Err(e) => ""

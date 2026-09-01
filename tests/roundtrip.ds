@@ -81,7 +81,7 @@ fn go() {
     return;
   }
 
-  const encoded_val = match (unsafe { encodeURIComponent("a b") }) {
+  const encoded_val = match (unsafe<string> { encodeURIComponent("a b") }) {
     Ok(v) => v,
     Err(e) => ""
   };
