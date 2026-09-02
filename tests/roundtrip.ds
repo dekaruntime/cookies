@@ -10,11 +10,11 @@ fn req(cookie: string) {
   return { headers: { cookie: cookie } }
 }
 
-fn contains(hay: string, needle: string): boolean {
+fn contains(hay: string, needle: string) boolean {
   return hay.includes(needle)
 }
 
-fn field_of(header: string, key: string): string {
+fn field_of(header: string, key: string) string {
   const bag = parse(header)
   let r = unsafe { Object.prototype.hasOwnProperty.call(bag, key) ? String(bag[key]) : "" };
   return match (r) {
@@ -23,7 +23,7 @@ fn field_of(header: string, key: string): string {
   };
 }
 
-fn unwrap_set(r: Result<string, string>): string {
+fn unwrap_set(r: Result<string, string>) string {
   return match (r) {
     Ok(v) => v,
     Err(e) => e,

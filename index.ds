@@ -42,7 +42,7 @@ interface CookieBag {
   _: string?
 }
 
-fn header_from(request: CookieRequest): string {
+fn header_from(request: CookieRequest) string {
   let r = unsafe {
     var headers = request && request.headers;
     if (!headers) return "";
@@ -54,7 +54,7 @@ fn header_from(request: CookieRequest): string {
   };
 }
 
-fn encode_value(value: string): string {
+fn encode_value(value: string) string {
   let r = unsafe<string> { encodeURIComponent(value) };
   return match (r) {
     Ok(v) => v,
@@ -62,7 +62,7 @@ fn encode_value(value: string): string {
   };
 }
 
-fn decode_value(raw: string): string {
+fn decode_value(raw: string) string {
   let r = unsafe {
     try {
       return decodeURIComponent(raw);
@@ -76,7 +76,7 @@ fn decode_value(raw: string): string {
   };
 }
 
-fn empty_bag(): CookieBag {
+fn empty_bag() CookieBag {
   let r = unsafe { return Object.create(null); };
   return match (r) {
     Ok(v) => v,
@@ -84,7 +84,7 @@ fn empty_bag(): CookieBag {
   };
 }
 
-fn bag_has(bag: CookieBag, key: string): boolean {
+fn bag_has(bag: CookieBag, key: string) boolean {
   let r = unsafe<boolean> { Object.prototype.hasOwnProperty.call(bag, key) };
   return match (r) {
     Ok(v) => v,
@@ -92,7 +92,7 @@ fn bag_has(bag: CookieBag, key: string): boolean {
   };
 }
 
-fn bag_set(bag: CookieBag, key: string, val: string): CookieBag {
+fn bag_set(bag: CookieBag, key: string, val: string) CookieBag {
   let r = unsafe {
     bag[key] = val;
     return bag;
@@ -125,7 +125,7 @@ fn cookie_attr_ok(value: string, which: string) {
   };
 }
 
-fn gmt_expires(unix: number): string {
+fn gmt_expires(unix: number) string {
   let r = unsafe<string> { return new Date(Number(unix) * 1000).toUTCString(); };
   return match (r) {
     Ok(v) => v,
@@ -134,7 +134,7 @@ fn gmt_expires(unix: number): string {
 }
 
 // string.indexOf is modeled as (number) -> number, so this is DS instead.
-fn eq_index(s: string): number {
+fn eq_index(s: string) number {
   for (let i = 0; i < s.length; i = i + 1) {
     if (s.slice(i, i + 1) == "=") {
       return i
@@ -143,15 +143,15 @@ fn eq_index(s: string): number {
   return -1
 }
 
-fn miss(): CookieHit {
+fn miss() CookieHit {
   return { found: false, value: "" }
 }
 
-fn hit(value: string): CookieHit {
+fn hit(value: string) CookieHit {
   return { found: true, value: value }
 }
 
-fn find_cookie(header: string, name: string): CookieHit {
+fn find_cookie(header: string, name: string) CookieHit {
   if (name == "") {
     return miss()
   }
@@ -184,7 +184,7 @@ interface RawOpts {
 
 // Optional interface fields are `undefined` when omitted, not Option.None,
 // so `match (options.path)` throws. Defaults stay here until that is Option.
-fn raw_options(options: CookieOptions): RawOpts {
+fn raw_options(options: CookieOptions) RawOpts {
   let r = unsafe {
     var o = options || {};
     return {
@@ -204,7 +204,7 @@ fn raw_options(options: CookieOptions): RawOpts {
   };
 }
 
-fn same_site_norm(value: string): string {
+fn same_site_norm(value: string) string {
   const v = value.trim().toLowerCase()
   if (v == "strict") {
     return "Strict"
@@ -215,7 +215,7 @@ fn same_site_norm(value: string): string {
   return "Lax"
 }
 
-fn cookie_attrs_of(path: string, domain: string, max_age: string, expires: string, secure: boolean, http_only: boolean, same_site: string): CookieAttrs {
+fn cookie_attrs_of(path: string, domain: string, max_age: string, expires: string, secure: boolean, http_only: boolean, same_site: string) CookieAttrs {
   return { path: path, domain: domain, max_age: max_age, expires: expires, secure: secure, http_only: http_only, same_site: same_site }
 }
 
@@ -255,7 +255,7 @@ fn domain_ok(domain: string) {
   return cookie_attr_ok(domain, "domain")
 }
 
-fn render_set_cookie(name: string, encoded: string, attrs: CookieAttrs): string {
+fn render_set_cookie(name: string, encoded: string, attrs: CookieAttrs) string {
   let cookie = name + "=" + encoded
   if (attrs.path != "") {
     cookie = cookie + "; Path=" + attrs.path
@@ -281,11 +281,11 @@ fn render_set_cookie(name: string, encoded: string, attrs: CookieAttrs): string 
   return cookie
 }
 
-export fn header(request: CookieRequest): string {
+export fn header(request: CookieRequest) string {
   return header_from(request)
 }
 
-export fn value(header: string, name: string): string {
+export fn value(header: string, name: string) string {
   const found = find_cookie(header, name)
   if (found.found) {
     return found.value
@@ -316,12 +316,12 @@ export fn all(request: CookieRequest) {
   return parse(header_from(request))
 }
 
-export fn has(request: CookieRequest, name: string): boolean {
+export fn has(request: CookieRequest, name: string) boolean {
   const found = find_cookie(header_from(request), name)
   return found.found
 }
 
-export fn get(request: CookieRequest, name: string, fallback: string = ""): string {
+export fn get(request: CookieRequest, name: string, fallback: string = "") string {
   const found = find_cookie(header_from(request), name)
   if (found.found) {
     return found.value
@@ -339,7 +339,7 @@ export fn build_set_cookie(name: string, value: string, options: CookieOptions =
   }
 }
 
-fn cleared_options(options: CookieOptions): CookieOptions {
+fn cleared_options(options: CookieOptions) CookieOptions {
   const raw = raw_options(options)
   // CookieOptions fields are declared `T?`, so each is an Option and must be
   // written Some(x). A raw value was accepted as sugar for Some(x) until
