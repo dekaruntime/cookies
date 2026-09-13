@@ -1,8 +1,8 @@
 summon {
-  encode_uri(value: string): Exception<string, JsError>,
-  decode_uri(value: string): Exception<string, JsError>
+  encode_uri(value: string) Exception<string, JsError>,
+  decode_uri(value: string) Exception<string, JsError>
 } from "../boundary.mjs"
-summon { total lone_surrogate(): string } from "./fixtures.mjs"
+summon { total lone_surrogate() string } from "./fixtures.mjs"
 import { echo } from "io"
 
 import { header, value, parse, all, has, get, build_set_cookie, clear_cookie, bag_value } from "../index.ds"
