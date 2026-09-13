@@ -7,6 +7,7 @@
 
 interface CookieHeaders {
   cookie: string?
+  Cookie: string?
 }
 
 interface CookieRequest {
@@ -38,99 +39,55 @@ interface CookieAttrs {
   same_site: string
 }
 
-interface CookieBag {
-  _: string?
+opaque type CookieBag
+summon {
+  total empty_bag(): CookieBag,
+  total bag_has(bag: CookieBag, key: string): boolean,
+  total bag_set(bag: CookieBag, key: string, value: string): CookieBag,
+  total bag_get(bag: CookieBag, key: string): Option<string>,
+  encode_uri(value: string): Exception<string, JsError>,
+  decode_uri(value: string): Exception<string, JsError>,
+  total gmt_expires(unix: number): string
+} from "./boundary.mjs"
+
+fn header_fields(headers: CookieHeaders) string {
+  const lower = match (headers.cookie) { Some(v) => v, None => "" }
+  if (lower != "") { return lower }
+  return match (headers.Cookie) { Some(v) => v, None => "" }
 }
 
 fn header_from(request: CookieRequest) string {
-  let r = unsafe {
-    var headers = request && request.headers;
-    if (!headers) return "";
-    return String(headers.cookie || headers.Cookie || "");
-  };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => ""
-  };
+  return match (request.headers) { None => "", Some(headers) => header_fields(headers) }
 }
 
 fn encode_value(value: string) string {
-  let r = unsafe<string> { encodeURIComponent(value) };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => value
-  };
+  return match (encode_uri(value)) { Ok(v) => v, Throw(e) => value }
 }
 
 fn decode_value(raw: string) string {
-  let r = unsafe {
-    try {
-      return decodeURIComponent(raw);
-    } catch (err) {
-      return raw;
-    }
-  };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => raw
-  };
+  return match (decode_uri(raw)) { Ok(v) => v, Throw(e) => raw }
 }
 
-fn empty_bag() CookieBag {
-  let r = unsafe { return Object.create(null); };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => { _: None }
-  };
+export fn bag_value(bag: CookieBag, key: string) Option<string> {
+  return bag_get(bag, key)
 }
 
-fn bag_has(bag: CookieBag, key: string) boolean {
-  let r = unsafe<boolean> { Object.prototype.hasOwnProperty.call(bag, key) };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => false
-  };
+fn cookie_name_ok(name: string) Result<boolean, string> {
+  if (name == "") { return Err("invalid cookie name") }
+  const allowed = "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  for (let i = 0; i < name.length; i = i + 1) {
+    if (!allowed.includes(name.slice(i, i + 1))) { return Err("invalid cookie name") }
+  }
+  return Ok(true)
 }
 
-fn bag_set(bag: CookieBag, key: string, val: string) CookieBag {
-  let r = unsafe {
-    bag[key] = val;
-    return bag;
-  };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => bag
-  };
-}
-
-fn cookie_name_ok(name: string) {
-  let r = unsafe {
-    if (/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) return true;
-    throw new Error("invalid cookie name");
-  };
-  return match (r) {
-    Ok(_) => Ok(true),
-    Err(e) => Err("invalid cookie name")
-  };
-}
-
-fn cookie_attr_ok(value: string, which: string) {
-  let r = unsafe {
-    if (/[\x00-\x1F\x7F;,]/.test(value)) throw new Error("bad");
-    return true;
-  };
-  return match (r) {
-    Ok(_) => Ok(true),
-    Err(e) => Err("invalid cookie " + which)
-  };
-}
-
-fn gmt_expires(unix: number) string {
-  let r = unsafe<string> { return new Date(Number(unix) * 1000).toUTCString(); };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => ""
-  };
+fn cookie_attr_ok(value: string, which: string) Result<boolean, string> {
+  for (let i = 0; i < value.length; i = i + 1) {
+    const ch = value.slice(i, i + 1)
+    // The second literal is DEL (U+007F).
+    if (ch < " " || ch == "" || ch == ";" || ch == ",") { return Err("invalid cookie " + which) }
+  }
+  return Ok(true)
 }
 
 // string.indexOf is modeled as (number) -> number, so this is DS instead.
@@ -182,26 +139,8 @@ interface RawOpts {
   same_site: string
 }
 
-// Optional interface fields are `undefined` when omitted, not Option.None,
-// so `match (options.path)` throws. Defaults stay here until that is Option.
 fn raw_options(options: CookieOptions) RawOpts {
-  let r = unsafe {
-    var o = options || {};
-    return {
-      path: o.path == null ? "/" : String(o.path),
-      domain: o.domain == null ? "" : String(o.domain),
-      max_age: o.max_age == null || o.max_age === "" ? "" : String(Number(o.max_age)),
-      has_expires: o.expires != null && o.expires !== "",
-      expires_unix: o.expires != null && o.expires !== "" ? Number(o.expires) : 0,
-      secure: o.secure == null ? true : Boolean(o.secure),
-      http_only: o.http_only == null ? true : Boolean(o.http_only),
-      same_site: o.same_site == null ? "Lax" : String(o.same_site)
-    };
-  };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => { path: "/", domain: "", max_age: "", has_expires: false, expires_unix: 0, secure: true, http_only: true, same_site: "Lax" }
-  };
+  return { path: match (options.path) { Some(v) => v, None => "/" }, domain: match (options.domain) { Some(v) => v, None => "" }, max_age: match (options.max_age) { Some(v) => "" + v, None => "" }, has_expires: match (options.expires) { Some(v) => true, None => false }, expires_unix: match (options.expires) { Some(v) => v, None => 0 }, secure: match (options.secure) { Some(v) => v, None => true }, http_only: match (options.http_only) { Some(v) => v, None => true }, same_site: match (options.same_site) { Some(v) => v, None => "Lax" } }
 }
 
 fn same_site_norm(value: string) string {
@@ -341,10 +280,6 @@ export fn build_set_cookie(name: string, value: string, options: CookieOptions =
 
 fn cleared_options(options: CookieOptions) CookieOptions {
   const raw = raw_options(options)
-  // CookieOptions fields are declared `T?`, so each is an Option and must be
-  // written Some(x). A raw value was accepted as sugar for Some(x) until
-  // dekaruntime/deka#412 removed it — the emitter never implemented the sugar,
-  // so the value was left unwrapped and threw on the first match.
   return { path: Some(raw.path), domain: Some(raw.domain), max_age: Some(0), expires: Some(0), secure: Some(raw.secure), http_only: Some(raw.http_only), same_site: Some(raw.same_site) }
 }
 
