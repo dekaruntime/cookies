@@ -1,13 +1,18 @@
+summon {
+  encode_uri(value: string): Exception<string, JsError>,
+  decode_uri(value: string): Exception<string, JsError>
+} from "../boundary.mjs"
+summon { total lone_surrogate(): string } from "./fixtures.mjs"
 import { echo } from "io"
 
-import { header, value, parse, all, has, get, build_set_cookie, clear_cookie } from "../index.ds"
+import { header, value, parse, all, has, get, build_set_cookie, clear_cookie, bag_value } from "../index.ds"
 
 fn fail(msg: string) {
   echo(msg)
 }
 
 fn req(cookie: string) {
-  return { headers: { cookie: cookie } }
+  return { headers: Some({ cookie: Some(cookie) }) }
 }
 
 fn contains(hay: string, needle: string) boolean {
@@ -16,18 +21,13 @@ fn contains(hay: string, needle: string) boolean {
 
 fn field_of(header: string, key: string) string {
   const bag = parse(header)
-  let r = unsafe { Object.prototype.hasOwnProperty.call(bag, key) ? String(bag[key]) : "" };
-  return match (r) {
-    Ok(v) => v,
-    Err(e) => ""
-  };
+  return match (bag_value(bag, key)) { Some(v) => v, None => "" }
 }
 
 fn unwrap_set(r: Result<string, string>) string {
   return match (r) {
     Ok(v) => v,
     Err(e) => e,
-    _ => ""
   }
 }
 
@@ -69,7 +69,9 @@ fn go() {
     return;
   }
 
-  if (field_of(jar, "theme") != "dark") {
+  const all_theme = match (bag_value(all(request), "theme")) { Some(v) => v, None => "" };
+  const absent = match (bag_value(parse(jar), "missing")) { Some(v) => false, None => true };
+  if (all_theme != "dark" || !absent) {
     fail("fail-all");
     return;
   }
@@ -81,19 +83,13 @@ fn go() {
     return;
   }
 
-  const encoded_val = match (unsafe<string> { encodeURIComponent("a b") }) {
-    Ok(v) => v,
-    Err(e) => ""
-  };
+  const encoded_val = "a%20b";
   if (get(req("sid=" + encoded_val), "sid") != "a b") {
     fail("fail-decode");
     return;
   }
 
-  const cap = match (unsafe { ({ headers: { Cookie: "sid=bob" } }) }) {
-    Ok(v) => v,
-    Err(e) => req("")
-  };
+  const cap = { headers: Some({ Cookie: Some("sid=bob") }) };
   if (get(cap, "sid") != "bob") {
     fail("fail-cookie-header");
     return;
@@ -116,7 +112,7 @@ fn go() {
     return;
   }
 
-  const custom_opts = { path: "/app", domain: "example.com", max_age: 60, secure: false, http_only: false, same_site: "strict" };
+  const custom_opts = { path: Some("/app"), domain: Some("example.com"), max_age: Some(60), secure: Some(false), http_only: Some(false), same_site: Some("strict") };
   const custom = unwrap_set(build_set_cookie("sid", "x", custom_opts));
   if (!contains(custom, "Path=/app") || !contains(custom, "Domain=example.com") || !contains(custom, "Max-Age=60")) {
     fail("fail-set-custom");
@@ -134,7 +130,7 @@ fn go() {
     return;
   }
 
-  const none_opts = { same_site: "none", secure: true };
+  const none_opts = { same_site: Some("none"), secure: Some(true) };
   const none = unwrap_set(build_set_cookie("sid", "x", none_opts));
   if (!contains(none, "SameSite=None") || !contains(none, "Secure")) {
     fail("fail-samesite-none");
@@ -142,21 +138,21 @@ fn go() {
     return;
   }
 
-  const none_insecure = { same_site: "none", secure: false };
+  const none_insecure = { same_site: Some("none"), secure: Some(false) };
   if (unwrap_set(build_set_cookie("sid", "x", none_insecure)) != "SameSite=None requires Secure") {
     fail("fail-samesite-none-secure");
     echo(unwrap_set(build_set_cookie("sid", "x", none_insecure)));
     return;
   }
 
-  const bad_path = { path: "/; Domain=evil.com" };
+  const bad_path = { path: Some("/; Domain=evil.com") };
   if (unwrap_set(build_set_cookie("sid", "v", bad_path)) != "invalid cookie path") {
     fail("fail-inject-path");
     echo(unwrap_set(build_set_cookie("sid", "v", bad_path)));
     return;
   }
 
-  const bad_domain = { domain: "evil.com,x" };
+  const bad_domain = { domain: Some("evil.com,x") };
   if (unwrap_set(build_set_cookie("sid", "v", bad_domain)) != "invalid cookie domain") {
     fail("fail-inject-domain");
     echo(unwrap_set(build_set_cookie("sid", "v", bad_domain)));
@@ -169,7 +165,7 @@ fn go() {
     return;
   }
 
-  const clear_opts = { path: "/", secure: false };
+  const clear_opts = { path: Some("/"), secure: Some(false) };
   const cleared = unwrap_set(clear_cookie("sid", clear_opts));
   if (!contains(cleared, "sid=") || !contains(cleared, "Max-Age=0") || !contains(cleared, "Expires=")) {
     fail("fail-clear");
@@ -177,6 +173,16 @@ fn go() {
     return;
   }
 
+  if (header({}) != "" || header({ headers: Some({}) }) != "") { fail("fail-omitted-header"); return; }
+  if (field_of("__proto__=safe; constructor=first; constructor=second", "__proto__") != "safe" || field_of("constructor=first; constructor=second", "constructor") != "first") { fail("fail-bag"); return; }
+  if (value("sid=%E0%A4%A", "sid") != "%E0%A4%A") { fail("fail-bad-uri-fallback"); return; }
+  if (unwrap_set(clear_cookie("sid")) != "sid=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; HttpOnly; SameSite=Lax") { fail("fail-clear-default"); return; }
+  const uri_encode_failed = match (encode_uri(lone_surrogate())) { Ok(v) => false, Throw(e) => true };
+  const uri_decode_failed = match (decode_uri("%E0%A4%A")) { Ok(v) => false, Throw(e) => true };
+  if (!uri_encode_failed || !uri_decode_failed) { fail("fail-uri-exception"); return; }
+  if (unwrap_set(build_set_cookie("sid", lone_surrogate())) != "sid=" + lone_surrogate() + "; Path=/; Secure; HttpOnly; SameSite=Lax") { fail("fail-encode-fallback"); return; }
+  if (unwrap_set(build_set_cookie("", "x")) != "invalid cookie name" || unwrap_set(build_set_cookie("café", "x")) != "invalid cookie name") { fail("fail-name-token"); return; }
+  if (unwrap_set(build_set_cookie("sid", "x", { path: Some("/") })) != "invalid cookie path" || unwrap_set(build_set_cookie("sid", "x", { domain: Some("x\r\n") })) != "invalid cookie domain") { fail("fail-attr-controls"); return; }
   echo("ok");
 }
 
