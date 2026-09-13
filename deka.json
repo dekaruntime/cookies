@@ -1,8 +1,8 @@
 {
   "name": "@deka/cookies",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "main": "index.ds",
   "dependencies": {
-    "@deka/io": "0.3.0"
+    "@deka/io": "0.3.1"
   }
 }

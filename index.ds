@@ -41,13 +41,13 @@ interface CookieAttrs {
 
 opaque type CookieBag
 summon {
-  total empty_bag(): CookieBag,
-  total bag_has(bag: CookieBag, key: string): boolean,
-  total bag_set(bag: CookieBag, key: string, value: string): CookieBag,
-  total bag_get(bag: CookieBag, key: string): Option<string>,
-  encode_uri(value: string): Exception<string, JsError>,
-  decode_uri(value: string): Exception<string, JsError>,
-  total gmt_expires(unix: number): string
+  total empty_bag() CookieBag,
+  total bag_has(bag: CookieBag, key: string) boolean,
+  total bag_set(bag: CookieBag, key: string, value: string) CookieBag,
+  total bag_get(bag: CookieBag, key: string) Option<string>,
+  encode_uri(value: string) Exception<string, JsError>,
+  decode_uri(value: string) Exception<string, JsError>,
+  total gmt_expires(unix: number) string
 } from "./boundary.mjs"
 
 fn header_fields(headers: CookieHeaders) string {
